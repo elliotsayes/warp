@@ -10,6 +10,7 @@ import { BasicSortKeyCache } from '../../cache/BasicSortKeyCache';
  */
 export interface StateEvaluator {
   eval<State>(executionContext: ExecutionContext<State>): Promise<SortKeyCacheResult<EvalStateResult<State>>>;
+  evalHistory<State>(executionContext: ExecutionContext<State>): Promise<SortKeyCacheResult<EvalStateResult<State>>[]>;
 
   /**
    * a hook that is called on each state update (i.e. after evaluating state for each interaction transaction)

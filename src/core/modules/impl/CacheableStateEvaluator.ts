@@ -79,11 +79,11 @@ export class CacheableStateEvaluator extends DefaultStateEvaluator {
       }
     }
     // eval state for the missing transactions - starting from the latest value from cache.
-    return await this.doReadState(
+    return await this.doReadStateHistory(
       missingInteractions,
       new EvalStateResult(baseState, baseValidity, baseErrorMessages || {}),
       executionContext
-    );
+    ).then((results) => results[results.length - 1]);
   }
 
   async onStateEvaluated<State>(

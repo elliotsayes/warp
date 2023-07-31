@@ -41,18 +41,28 @@ export abstract class DefaultStateEvaluator implements StateEvaluator {
   async eval<State>(
     executionContext: ExecutionContext<State, HandlerApi<State>>
   ): Promise<SortKeyCacheResult<EvalStateResult<State>>> {
-    return this.doReadState(
+    return this.doReadStateHistory(
+      executionContext.sortedInteractions,
+      new EvalStateResult<State>(executionContext.contractDefinition.initState, {}, {}),
+      executionContext
+    ).then((results) => results[results.length - 1]);
+  }
+
+  async evalHistory<State>(
+    executionContext: ExecutionContext<State, HandlerApi<State>>
+  ): Promise<SortKeyCacheResult<EvalStateResult<State>>[]> {
+    return this.doReadStateHistory(
       executionContext.sortedInteractions,
       new EvalStateResult<State>(executionContext.contractDefinition.initState, {}, {}),
       executionContext
     );
   }
 
-  protected async doReadState<State>(
+  protected async doReadStateHistory<State>(
     missingInteractions: GQLNodeInterface[],
     baseState: EvalStateResult<State>,
     executionContext: ExecutionContext<State, HandlerApi<State>>
-  ): Promise<SortKeyCacheResult<EvalStateResult<State>>> {
+  ): Promise<SortKeyCacheResult<EvalStateResult<State>>[]> {
     const { ignoreExceptions, stackTrace, internalWrites } = executionContext.evaluationOptions;
     const { contract, contractDefinition, sortedInteractions, warp } = executionContext;
 
@@ -83,6 +93,11 @@ export abstract class DefaultStateEvaluator implements StateEvaluator {
     const vrfPlugin = warp.maybeLoadPlugin<void, VrfPluginFunctions>('vrf');
 
     let shouldBreakAfterEvolve = false;
+
+    // Use initial state as first in history.
+    const initalEvalStateResult = new EvalStateResult(currentState, validity, errorMessages);
+    const intialSortKeyCacheResult = new SortKeyCacheResult(currentSortKey, initalEvalStateResult);
+    const stateUpdateHistory: SortKeyCacheResult<EvalStateResult<State>>[] = [intialSortKeyCacheResult];
 
     for (let i = 0; i < missingInteractionsLength; i++) {
       if (shouldBreakAfterEvolve) {
@@ -302,8 +317,10 @@ export abstract class DefaultStateEvaluator implements StateEvaluator {
         // if that's an inner contract call - only update the state in the uncommitted states
         contract.interactionState().update(contract.txId(), new EvalStateResult(currentState, validity, errorMessages));
       }
+      const updateEvalStateResult = new EvalStateResult<State>(currentState, validity, errorMessages);
+      const updateSortKeyCacheResult = new SortKeyCacheResult(currentSortKey, updateEvalStateResult);
+      stateUpdateHistory.push(updateSortKeyCacheResult);
     }
-    const evalStateResult = new EvalStateResult<State>(currentState, validity, errorMessages);
 
     // state could have been fully retrieved from cache
     // or there were no interactions below requested sort key
@@ -311,7 +328,7 @@ export abstract class DefaultStateEvaluator implements StateEvaluator {
       await this.onStateEvaluated(lastConfirmedTxState.tx, executionContext, lastConfirmedTxState.state);
     }
 
-    return new SortKeyCacheResult(currentSortKey, evalStateResult);
+    return stateUpdateHistory;
   }
 
   private logResult<State>(
