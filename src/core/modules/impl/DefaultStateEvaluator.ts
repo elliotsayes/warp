@@ -317,7 +317,10 @@ export abstract class DefaultStateEvaluator implements StateEvaluator {
         // if that's an inner contract call - only update the state in the uncommitted states
         contract.interactionState().update(contract.txId(), new EvalStateResult(currentState, validity, errorMessages));
       }
-      const updateEvalStateResult = new EvalStateResult<State>(currentState, validity, errorMessages);
+      const validityLocal: Record<string, boolean> = {
+        [missingInteraction.id]: validity[missingInteraction.id]
+      };
+      const updateEvalStateResult = new EvalStateResult<State>(currentState, validityLocal, errorMessages);
       const updateSortKeyCacheResult = new SortKeyCacheResult(currentSortKey, updateEvalStateResult);
       stateUpdateHistory.push(updateSortKeyCacheResult);
     }
