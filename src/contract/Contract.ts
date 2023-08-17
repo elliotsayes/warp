@@ -114,6 +114,12 @@ export interface Contract<State = unknown> {
     interactions?: GQLNodeInterface[]
   ): Promise<SortKeyCacheResult<EvalStateResult<State>>>;
 
+  readStateHistory(
+    sortKeyOrBlockHeight?: string | number,
+    caller?: string,
+    interactions?: GQLNodeInterface[]
+  ): Promise<SortKeyCacheResult<EvalStateResult<State>>[]>;
+
   readStateFor(sortKey: string, interactions: GQLNodeInterface[]): Promise<SortKeyCacheResult<EvalStateResult<State>>>;
 
   /**

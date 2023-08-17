@@ -199,6 +199,72 @@ export class HandlerBasedContract<State> implements Contract<State> {
     }
   }
 
+  async readStateHistory(
+    sortKeyOrBlockHeight?: string | number,
+    caller?: string,
+    interactions?: GQLNodeInterface[]
+  ): Promise<SortKeyCacheResult<EvalStateResult<State>>[]> {
+    this.logger.info('Read state for', {
+      contractTxId: this._contractTxId,
+      sortKeyOrBlockHeight
+    });
+    if (!this.isRoot() && sortKeyOrBlockHeight == null) {
+      throw new Error('SortKey MUST be always set for non-root contract calls');
+    }
+    const { stateEvaluator } = this.warp;
+    const sortKey =
+      typeof sortKeyOrBlockHeight == 'number'
+        ? this._sorter.generateLastSortKey(sortKeyOrBlockHeight)
+        : sortKeyOrBlockHeight;
+
+    // if (sortKey && !this.isRoot() && this.interactionState().has(this.txId())) {
+    //   const result = this.interactionState().get(this.txId());
+    //   return new SortKeyCacheResult<EvalStateResult<State>>(sortKey, result as EvalStateResult<State>);
+    // }
+
+    // TODO: not sure if we should synchronize on a contract instance or contractTxId
+    // in the latter case, the warp instance should keep a map contractTxId -> mutex
+    const releaseMutex = await this._mutex.acquire();
+    try {
+      const initBenchmark = Benchmark.measure();
+      this.maybeResetRootContract();
+
+      const executionContext = await this.createExecutionContext(this._contractTxId, sortKey, false, interactions);
+      this.logger.info('Execution Context', {
+        srcTxId: executionContext.contractDefinition?.srcTxId,
+        missingInteractions: executionContext.sortedInteractions?.length,
+        cachedSortKey: executionContext.cachedState?.sortKey
+      });
+      initBenchmark.stop();
+
+      const stateBenchmark = Benchmark.measure();
+      const result = await stateEvaluator.evalHistory(executionContext);
+      stateBenchmark.stop();
+
+      const total = (initBenchmark.elapsed(true) as number) + (stateBenchmark.elapsed(true) as number);
+
+      this._benchmarkStats = {
+        gatewayCommunication: initBenchmark.elapsed(true) as number,
+        stateEvaluation: stateBenchmark.elapsed(true) as number,
+        total
+      };
+
+      this.logger.info('Benchmark', {
+        'Gateway communication  ': initBenchmark.elapsed(),
+        'Contract evaluation    ': stateBenchmark.elapsed(),
+        'Total:                 ': `${total.toFixed(0)}ms`
+      });
+
+      // if (sortKey && !this.isRoot()) {
+      //   this.interactionState().update(this.txId(), result.cachedValue);
+      // }
+
+      return result;
+    } finally {
+      releaseMutex();
+    }
+  }
+
   async readStateFor(
     sortKey: string,
     interactions: GQLNodeInterface[]
